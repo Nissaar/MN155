@@ -78,11 +78,11 @@ export default function App() {
 
   useEffect(() => {
     const checkPuter = setInterval(() => {
-      if (window.puter) {
+      if (window.puter && window.puter.ai) {
         setIsPuterReady(true);
         clearInterval(checkPuter);
       }
-    }, 100);
+    }, 200);
     return () => clearInterval(checkPuter);
   }, []);
 
@@ -228,6 +228,9 @@ export default function App() {
   };
 
   const performDeliberation = async (prompt: string): Promise<{ responses: CouncilMemberResponse[], consensus: string }> => {
+    if (!window.puter || !window.puter.ai) {
+      throw new Error('Neural core offline. Re-establishing link...');
+    }
     const models = ['claude-3-5-sonnet', 'gpt-4o', 'claude-opus-4.7'];
     const responses: CouncilMemberResponse[] = [];
     
@@ -236,8 +239,8 @@ export default function App() {
       try {
         const res = await window.puter.ai.chat(prompt, { model });
         responses.push({ model, content: res.text, status: 'done' });
-      } catch (e) {
-        responses.push({ model, content: 'Error retrieving response', status: 'error' });
+      } catch (e: any) {
+        responses.push({ model, content: `Interference detected: ${e.message}`, status: 'error' });
       }
     }
 
@@ -246,15 +249,28 @@ export default function App() {
       responses.map(r => `[Model ${r.model}]: ${r.content}`).join('\n\n') +
       `\n\nAnalyze these responses, identify conflicts, and provide a single, unified, superior consensus answer that captures the best of all worlds.`;
 
-    const consensusRes = await window.puter.ai.chat(synthesisPrompt, { model: 'claude-opus-4.7' });
-    
-    return { responses, consensus: consensusRes.text };
+    try {
+      const consensusRes = await window.puter.ai.chat(synthesisPrompt, { model: 'claude-opus-4.7' });
+      return { responses, consensus: consensusRes.text };
+    } catch (e) {
+      return { responses, consensus: "Deliberation failed due to node instability. Please retry sequence." };
+    }
   };
 
   const handleSend = async (e?: React.FormEvent, retryMessageId?: string) => {
     if (e) e.preventDefault();
     if (!user) return;
     if ((!input.trim() && !retryMessageId) || isLoading) return;
+
+    if (!window.puter || !window.puter.ai) {
+      setMessages(prev => [...prev, { 
+        id: Date.now().toString(), 
+        role: 'assistant', 
+        content: "### [!] ERROR: NEURAL CORE OFFLINE\nThe connection to the Puter AI cloud was interrupted. Please wait for the 'Reconnect AI' indicator in the header or refresh the terminal.", 
+        timestamp: Date.now() 
+      }]);
+      return;
+    }
 
     let chatId = currentChatId;
     if (!chatId) {
@@ -289,14 +305,18 @@ export default function App() {
       });
 
       if (chatHistory.length === 1) {
-        const titleResponse = await window.puter.ai.chat(`Short title for: ${userInput}`);
-        const newTitle = titleResponse.text.replace(/"/g, '').trim();
-        await fetch(`/api/chats/${chatId}/title`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: newTitle }),
-        });
-        setChats(prev => prev.map(c => c.id === chatId ? { ...c, title: newTitle } : c));
+        try {
+          const titleResponse = await window.puter.ai.chat(`Short title (max 20 chars) for: ${userInput}`);
+          const newTitle = titleResponse.text.replace(/"/g, '').trim().toUpperCase();
+          await fetch(`/api/chats/${chatId}/title`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: newTitle }),
+          });
+          setChats(prev => prev.map(c => c.id === chatId ? { ...c, title: newTitle } : c));
+        } catch (e) {
+          console.warn("Title auto-generation failed", e);
+        }
       }
     } else {
       const assistantIndex = messages.findIndex(m => m.id === retryMessageId);
@@ -308,21 +328,20 @@ export default function App() {
     abortControllerRef.current = new AbortController();
 
     try {
-      if (!window.puter) throw new Error('Puter AI not available');
+      if (!window.puter || !window.puter.ai) throw new Error('Puter AI cloud service is not responding. Please check your network or try again.');
 
       let targetModel = selectedModel;
       if (targetModel === 'auto') {
-        const routerPrompt = `Identify the best AI model for this task. 
-        Complex logic/coding/strategy = 'claude-opus-4.7'. 
-        Fast/general facts = 'gpt-4o-mini'. 
-        High-quality creative writing = 'claude-3-5-sonnet'.
-        Simple tasks/summarization = 'claude-3-haiku' or 'gemini-flash'.
-        User prompt: "${userInput || chatHistory[chatHistory.length-1].content}"
-        Return ONLY the model ID name.`;
-        const routerRes = await window.puter.ai.chat(routerPrompt);
-        targetModel = routerRes.text.trim() as ModelType;
-        const validModels = ['claude-opus-4.7', 'gpt-4o', 'gpt-4o-mini', 'claude-3-5-sonnet', 'claude-3-haiku', 'gemini-flash'];
-        if (!validModels.includes(targetModel)) {
+        try {
+          const routerPrompt = `Task analysis: Recommend best model. 
+          Models: 'claude-opus-4.7' (complex/code), 'gpt-4o' (multimodal), 'claude-3-5-sonnet' (creative), 'gemini-1.5-flash' (speed).
+          Prompt: "${userInput || chatHistory[chatHistory.length-1].content}"
+          Return ID only.`;
+          const routerRes = await window.puter.ai.chat(routerPrompt);
+          targetModel = routerRes.text.trim() as ModelType;
+          const validModels = ['claude-opus-4.7', 'gpt-4o', 'gemini-1.5-flash', 'claude-3-5-sonnet'];
+          if (!validModels.includes(targetModel)) targetModel = 'claude-3-5-sonnet';
+        } catch (e) {
           targetModel = 'claude-3-5-sonnet';
         }
       }
@@ -376,10 +395,10 @@ export default function App() {
 
   if (isAuthLoading) {
     return (
-      <div className="h-screen w-screen flex items-center justify-center bg-white">
+      <div className="h-screen w-screen flex items-center justify-center bg-gray-50">
         <div className="flex flex-col items-center gap-4">
           <Loader2 className="animate-spin text-blue-600" size={32} />
-          <p className="text-xs font-medium text-gray-400 tracking-widest uppercase">Initializing Core</p>
+          <p className="text-sm font-medium text-gray-400">Starting Chat...</p>
         </div>
       </div>
     );
@@ -387,33 +406,45 @@ export default function App() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#ffffff] p-6">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-6">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm">
           <div className="flex flex-col items-center mb-10">
-            <div className="w-12 h-12 bg-gray-900 flex items-center justify-center mb-6 shadow-xl text-white">
+            <div className="w-12 h-12 bg-blue-600 flex items-center justify-center mb-6 shadow-xl rounded-2xl text-white">
               <Bot size={28} />
             </div>
-            <h1 className="text-xl font-black uppercase tracking-[0.2em] text-gray-900">MN155 Terminal</h1>
-            <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest mt-2">Advanced Intelligence Interface</p>
+            <h1 className="text-2xl font-bold text-gray-900">Chat AI</h1>
+            <p className="text-gray-500 text-sm mt-1">Simple, smart conversations</p>
           </div>
-          <form onSubmit={handleAuth} className="space-y-4">
-            {authError && <div className="bg-red-50 text-red-600 text-[10px] font-bold uppercase tracking-widest p-4 border-l-4 border-red-600">{authError}</div>}
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Email Address</label>
-              <input name="email" type="email" required className="architect-input" placeholder="NAME@DOMAIN.COM" />
+          
+          <div className="bg-white border border-gray-200 p-8 rounded-3xl shadow-sm">
+            <form onSubmit={handleAuth} className="space-y-5">
+              {authError && (
+                <div className="bg-red-50 text-red-600 text-xs font-medium p-4 rounded-xl border border-red-100 flex items-center gap-2">
+                  <X size={14} />
+                  {authError}
+                </div>
+              )}
+              
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-gray-600 ml-1">Email Address</label>
+                <input name="email" type="email" required className="app-input shadow-none" placeholder="name@example.com" />
+              </div>
+              
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-gray-600 ml-1">Password</label>
+                <input name="password" type="password" required className="app-input shadow-none" placeholder="••••••••" />
+              </div>
+              
+              <button type="submit" className="w-full py-4 bg-blue-600 text-white text-sm font-bold rounded-2xl hover:bg-blue-700 transition-all active:scale-[0.98] shadow-lg shadow-blue-600/20">
+                {authMode === 'login' ? 'Log In' : 'Sign Up'}
+              </button>
+            </form>
+            
+            <div className="mt-8 text-center">
+              <button onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')} className="text-xs text-gray-500 font-medium hover:text-blue-600 transition-colors">
+                {authMode === 'login' ? "New here? Create an account" : "Already have an account? Log in"}
+              </button>
             </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Secure Password</label>
-              <input name="password" type="password" required className="architect-input" placeholder="••••••••" />
-            </div>
-            <button type="submit" className="w-full py-4 bg-gray-900 text-white text-[11px] font-black uppercase tracking-[0.3em] hover:bg-black transition-all active:scale-[0.98]">
-              {authMode === 'login' ? 'Sign In' : 'Create Account'}
-            </button>
-          </form>
-          <div className="mt-8 text-center">
-            <button onClick={() => setAuthMode(authMode === 'login' ? 'signup' : 'login')} className="text-[10px] text-gray-400 font-bold hover:text-gray-900 transition-colors uppercase tracking-[0.2em]">
-              {authMode === 'login' ? "New User? Create Account" : "Existing User? Sign In"}
-            </button>
           </div>
         </motion.div>
       </div>
@@ -421,88 +452,83 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen bg-white font-sans text-gray-900">
+    <div className="flex h-screen bg-white font-sans text-gray-900 overflow-hidden">
       <AnimatePresence mode="wait">
         {isSidebarOpen && (
-          <motion.aside initial={{ width: 0, opacity: 0 }} animate={{ width: 300, opacity: 1 }} exit={{ width: 0, opacity: 0 }} className="flex flex-col bg-gray-50 border-r border-gray-100 h-full overflow-hidden">
-            <div className="p-6 flex flex-col gap-6">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black tracking-[0.3em] text-gray-400 uppercase">Archive</span>
-                <button onClick={createNewChat} className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-600 transition-colors"><Plus size={18} /></button>
+          <motion.aside initial={{ width: 0, opacity: 0 }} animate={{ width: 300, opacity: 1 }} exit={{ width: 0, opacity: 0 }} className="flex flex-col bg-gray-50 border-r border-gray-100 h-full overflow-hidden relative z-20">
+            <div className="p-6 flex flex-col gap-6 h-full">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Conversations</span>
+                <button onClick={createNewChat} className="p-2 hover:bg-gray-200 rounded-xl text-gray-500 transition-all"><Plus size={18} /></button>
               </div>
-              <div className="flex-1 space-y-0 max-h-[50vh] overflow-y-auto scrollbar-hide border border-gray-200 bg-white">
-                {chats.map(chat => (
-                  <div 
-                    key={chat.id} 
-                    onClick={() => setCurrentChatId(chat.id)} 
-                    className={`group flex items-center gap-3 px-4 py-3.5 text-[11px] uppercase tracking-widest transition-all cursor-pointer border-b border-gray-100 last:border-b-0 ${currentChatId === chat.id ? 'bg-gray-900 text-white font-black' : 'text-gray-500 hover:bg-gray-50 hover:text-gray-900 border-l-4 border-l-transparent'}`}
-                  >
-                    <MessageSquare size={14} className={currentChatId === chat.id ? 'text-blue-400' : 'text-gray-300'} />
-                    <span className="truncate flex-1">{chat.title}</span>
-                    <Trash2 onClick={(e) => deleteChat(e, chat.id)} className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all pointer-events-auto" size={12} />
+              
+              <div className="flex-1 space-y-1 overflow-y-auto pr-2 scrollbar-hide">
+                {chats.length === 0 ? (
+                  <div className="py-20 text-center space-y-3">
+                    <p className="text-xs text-gray-400 font-medium tracking-wide">No chats yet</p>
                   </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="mt-auto p-6 border-t border-gray-100 bg-white">
-              <div className="mb-6 space-y-2">
-                {user.is_admin && (
-                  <button onClick={() => setIsAdminView(!isAdminView)} className={`w-full flex items-center gap-3 px-3 py-3 border rounded-xl text-xs font-bold transition-all ${isAdminView ? 'bg-red-50 border-red-200 text-red-600' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
-                    <Shield size={16} />
-                    {isAdminView ? 'Exit Control Center' : 'Admin Control Center'}
-                  </button>
+                ) : (
+                  chats.map(chat => (
+                    <div 
+                      key={chat.id} 
+                      onClick={() => setCurrentChatId(chat.id)} 
+                      className={`group flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all cursor-pointer border ${currentChatId === chat.id ? 'bg-white text-blue-600 border-gray-200 shadow-sm' : 'text-gray-500 hover:bg-gray-100 border-transparent'}`}
+                    >
+                      <MessageSquare size={16} className={currentChatId === chat.id ? 'text-blue-600' : 'text-gray-400'} />
+                      <span className="truncate flex-1">{chat.title}</span>
+                      <Trash2 onClick={(e) => deleteChat(e, chat.id)} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all" size={14} />
+                    </div>
+                  ))
                 )}
-                <button onClick={openWorkspace} className="w-full flex items-center gap-3 px-3 py-3 border border-gray-200 rounded-xl text-xs text-gray-600 hover:bg-gray-50 transition-all">
-                  <FolderOpen size={16} className="text-amber-500" />
-                  Code Workspace
-                  {directoryHandle && <div className="w-2 h-2 rounded-full bg-green-500 ml-auto" />}
-                </button>
               </div>
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-xl bg-gray-900 flex items-center justify-center text-white text-xs font-black">{user.email[0].toUpperCase()}</div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold truncate">{user.email}</p>
-                  <p className="text-[9px] text-gray-400 uppercase font-black">Authorized</p>
+
+              <div className="mt-auto pt-6 space-y-6">
+                <div className="space-y-3">
+                  {user.is_admin && (
+                    <button onClick={() => setIsAdminView(!isAdminView)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all border ${isAdminView ? 'bg-red-50 border-red-100 text-red-600' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-100'}`}>
+                      <Shield size={16} />
+                      {isAdminView ? 'Exit Admin' : 'Admin Panel'}
+                    </button>
+                  )}
+                  <button onClick={openWorkspace} className="w-full flex items-center gap-3 px-4 py-3 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 transition-all">
+                    <FolderOpen size={16} className="text-amber-500" />
+                    Workspace
+                    {directoryHandle && <div className="w-2 h-2 rounded-full bg-green-500 ml-auto" />}
+                  </button>
                 </div>
-                <LogOut onClick={handleLogout} className="text-gray-300 hover:text-red-500 cursor-pointer transition-colors" size={18} />
-              </div>
-              <div className="space-y-3">
-                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block ml-1">System Engine</label>
-                <select 
-                  value={selectedModel} 
-                  onChange={(e) => setSelectedModel(e.target.value as ModelType)} 
-                  className="w-full bg-white border border-gray-200 rounded-none p-3 text-[10px] font-black uppercase tracking-widest outline-none focus:border-gray-900 transition-all cursor-pointer"
-                >
-                  <option value="auto">Automatic (Dynamic)</option>
-                  
-                  <optgroup label="Anthropic / Claude">
-                    <option value="claude-opus-4.7">Claude Opus 4.7</option>
-                    <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
-                    <option value="claude-3-5-haiku">Claude 3.5 Haiku</option>
-                    <option value="claude-3-opus">Claude 3 Opus</option>
-                    <option value="claude-3-sonnet">Claude 3 Sonnet</option>
-                    <option value="claude-3-haiku">Claude 3 Haiku</option>
-                  </optgroup>
 
-                  <optgroup label="OpenAI / GPT">
-                    <option value="gpt-4o">GPT-4o (Vision)</option>
-                    <option value="gpt-4o-mini">GPT-4o Mini</option>
-                    <option value="gpt-4-turbo">GPT-4 Turbo</option>
-                    <option value="gpt-3.5-turbo">GPT-3.5 Turbo</option>
-                  </optgroup>
+                <div className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-2xl shadow-sm">
+                  <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
+                    {user.email[0].toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-gray-900 truncate">{user.email.split('@')[0]}</p>
+                    <p className="text-[10px] text-gray-400 font-medium">Online</p>
+                  </div>
+                  <button onClick={handleLogout} className="p-2 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-500 transition-all">
+                    <LogOut size={16} />
+                  </button>
+                </div>
 
-                  <optgroup label="Google / Gemini">
-                    <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                    <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-                    <option value="gemini-pro">Gemini Pro</option>
-                    <option value="gemini-flash">Gemini Flash</option>
-                  </optgroup>
-
-                  <optgroup label="Specialized">
-                    <option value="council">AI Council (Consensus)</option>
-                  </optgroup>
-                </select>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block ml-1 text-center">AI Model</label>
+                  <select 
+                    value={selectedModel} 
+                    onChange={(e) => setSelectedModel(e.target.value as ModelType)} 
+                    className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-xs font-medium text-gray-700 outline-none focus:border-blue-500 transition-all cursor-pointer appearance-none shadow-sm"
+                  >
+                    <option value="auto">Auto-Select</option>
+                    <optgroup label="Fast">
+                      <option value="gemini-1.5-flash">Gemini Flash</option>
+                      <option value="gpt-4o-mini">GPT-4o Mini</option>
+                    </optgroup>
+                    <optgroup label="Powerful">
+                      <option value="claude-opus-4.7">Claude Opus</option>
+                      <option value="gpt-4o">GPT-4o</option>
+                    </optgroup>
+                    <option value="council">AI Council</option>
+                  </select>
+                </div>
               </div>
             </div>
           </motion.aside>
@@ -510,26 +536,26 @@ export default function App() {
       </AnimatePresence>
 
       <main className="flex-1 flex flex-col min-w-0 bg-white relative">
-        <header className="h-20 flex items-center justify-between px-8 z-10 sticky top-0 bg-white/80 backdrop-blur-xl border-b border-gray-50">
+        <header className="h-20 flex items-center justify-between px-8 z-10 sticky top-0 bg-white/80 backdrop-blur-xl border-b border-gray-100">
           <div className="flex items-center gap-6">
-            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 transition-colors">
+            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 transition-all">
               {isSidebarOpen ? <ChevronLeft size={22} /> : <Menu size={22} />}
             </button>
             <div className="flex flex-col">
-              <h2 className="text-sm font-black tracking-tight text-gray-900 flex items-center gap-2">
-                {chats.find(c => c.id === currentChatId)?.title || 'Global Terminal'}
-                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full uppercase tracking-widest">Live</span>
+              <h2 className="text-base font-bold tracking-tight text-gray-900 flex items-center gap-2">
+                {chats.find(c => c.id === currentChatId)?.title || 'New Chat'}
+                <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
               </h2>
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{selectedModel === 'council' ? 'Multi-Agent Network' : selectedModel.replace(/-/g, ' ')}</span>
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <div className="hidden md:flex flex-col items-end mr-4">
-              <span className="text-[9px] font-black text-gray-400 uppercase">Uplink Status</span>
-              <span className="text-[10px] font-bold text-green-600 flex items-center gap-1"><div className="w-1.5 h-1.5 rounded-full bg-green-500" />Encrypted</span>
-            </div>
+            {!isPuterReady && (
+              <button onClick={() => window.location.reload()} className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 text-amber-600 rounded-lg text-xs font-bold animate-pulse">
+                <RotateCcw size={14} /> Reconnect
+              </button>
+            )}
             {currentChatId && (
-              <button onClick={exportChat} className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 transition-colors" title="Export to Markdown">
+              <button onClick={exportChat} className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 transition-all" title="Export">
                 <ArrowRight size={20} className="rotate-[270deg]" />
               </button>
             )}
@@ -538,43 +564,39 @@ export default function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto px-8 py-12 scrollbar-hide">
-          <div className="max-w-4xl mx-auto space-y-16">
+          <div className="max-w-3xl mx-auto">
             {isAdminView ? (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
                 <div className="flex items-center justify-between border-b border-gray-100 pb-6">
-                  <h3 className="text-xl font-black">User Access Control</h3>
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                    <span className="text-[10px] font-bold text-gray-400 uppercase">Live Directory</span>
-                  </div>
+                  <h3 className="text-xl font-bold text-gray-900">User Management</h3>
                 </div>
                 <div className="bg-gray-50 rounded-3xl overflow-hidden border border-gray-100">
-                  <table className="w-full text-left text-xs">
+                  <table className="w-full text-left text-sm">
                     <thead>
                       <tr className="bg-gray-100/50">
-                        <th className="px-6 py-4 font-black text-gray-400 uppercase">Identity</th>
-                        <th className="px-6 py-4 font-black text-gray-400 uppercase">Access Level</th>
-                        <th className="px-6 py-4 font-black text-gray-400 uppercase">Status</th>
-                        <th className="px-6 py-4 font-black text-gray-400 uppercase text-right">Actions</th>
+                        <th className="px-6 py-4 font-bold text-gray-500 text-xs uppercase tracking-wider">User</th>
+                        <th className="px-6 py-4 font-bold text-gray-500 text-xs uppercase tracking-wider">Role</th>
+                        <th className="px-6 py-4 font-bold text-gray-500 text-xs uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-4 font-bold text-gray-500 text-xs uppercase tracking-wider text-right">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-gray-200">
                       {adminUsers.map(u => (
                         <tr key={u.id} className="hover:bg-white transition-colors">
-                          <td className="px-6 py-4 font-bold">{u.email}</td>
+                          <td className="px-6 py-4 font-medium text-gray-900">{u.email}</td>
                           <td className="px-6 py-4">
-                            <span className={`px-2 py-1 rounded-full text-[9px] font-black uppercase ${u.is_admin ? 'bg-purple-50 text-purple-600' : 'bg-gray-100 text-gray-500'}`}>
-                              {u.is_admin ? 'Admin' : 'Operator'}
+                            <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${u.is_admin ? 'bg-indigo-50 text-indigo-600' : 'bg-gray-100 text-gray-500'}`}>
+                              {u.is_admin ? 'Admin' : 'User'}
                             </span>
                           </td>
                           <td className="px-6 py-4">
-                            <span className={`px-2 py-1 rounded-full text-[9px] font-black uppercase ${u.status === 'approved' ? 'bg-green-50 text-green-600' : u.status === 'denied' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}>
+                            <span className={`px-2 py-1 rounded-lg text-[10px] font-bold uppercase ${u.status === 'approved' ? 'bg-green-50 text-green-600' : u.status === 'denied' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}>
                               {u.status}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-right space-x-2">
-                            {u.status !== 'approved' && <button onClick={() => updateUserStatus(u.id, 'approved')} className="p-2 hover:bg-green-50 text-green-600 rounded-lg"><Plus size={14} /></button>}
-                            {u.status !== 'denied' && <button onClick={() => updateUserStatus(u.id, 'denied')} className="p-2 hover:bg-red-50 text-red-600 rounded-lg"><X size={14} /></button>}
+                            {u.status !== 'approved' && <button onClick={() => updateUserStatus(u.id, 'approved')} className="p-1.5 hover:bg-green-50 text-green-600 rounded-lg"><Plus size={16} /></button>}
+                            {u.status !== 'denied' && <button onClick={() => updateUserStatus(u.id, 'denied')} className="p-1.5 hover:bg-red-50 text-red-600 rounded-lg"><X size={16} /></button>}
                           </td>
                         </tr>
                       ))}
@@ -583,84 +605,82 @@ export default function App() {
                 </div>
               </motion.div>
             ) : messages.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center pt-32 space-y-8">
-                <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="w-24 h-24 bg-gray-50 rounded-[40px] flex items-center justify-center text-gray-200 border border-gray-100">
-                  <Brain size={48} />
+              <div className="h-full flex flex-col items-center justify-center text-center pt-32 space-y-10">
+                <motion.div 
+                  initial={{ scale: 0.9, opacity: 0 }} 
+                  animate={{ scale: 1, opacity: 1 }} 
+                  className="w-24 h-24 bg-blue-50 rounded-3xl flex items-center justify-center text-blue-500"
+                >
+                  <Bot size={48} />
                 </motion.div>
                 <div className="space-y-4">
-                  <h3 className="text-3xl font-black tracking-tight text-gray-900">TERMINAL MN155 ONLINE.</h3>
-                  <p className="text-gray-400 text-sm max-w-md mx-auto leading-relaxed font-medium">Ready to assist with advanced logic, coding, and deliberation via the AI Council protocol.</p>
+                  <h3 className="text-3xl font-bold text-gray-900">How can I help you today?</h3>
+                  <p className="text-gray-500 text-base max-w-md mx-auto leading-relaxed">I'm your personal AI assistant, ready to help with tasks, questions, or just a friendly chat.</p>
                 </div>
               </div>
             ) : (
-              messages.map(m => (
-                <motion.div key={m.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={`flex gap-8 group ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                  {m.role !== 'user' && (
-                    <div className="w-10 h-10 rounded-2xl bg-gray-900 flex items-center justify-center text-white flex-shrink-0 mt-2 shadow-lg">
-                      {m.isCouncil ? <Users size={20} /> : <Bot size={20} />}
+              <div className="space-y-12 pb-10">
+                {messages.map((m, idx) => (
+                  <motion.div key={m.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }} className={`flex gap-6 ${m.role === 'user' ? 'flex-row-reverse' : ''}`}>
+                    <div className={`w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0 mt-1 shadow-sm ${m.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-500 border border-gray-200'}`}>
+                      {m.role === 'user' ? <User size={20} /> : m.isCouncil ? <Users size={20} /> : <Bot size={20} />}
                     </div>
-                  )}
-                  <div className={`max-w-[85%] relative ${m.role === 'user' ? 'order-first' : ''}`}>
-                    <div className={`flex items-center gap-3 mb-3 ${m.role === 'user' ? 'justify-end' : ''}`}>
-                      <span className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em]">{m.role === 'user' ? 'Authorized' : m.isCouncil ? 'AI Council' : 'MN155 Compute'}</span>
-                      {m.role === 'assistant' && !isLoading && (
-                        <button onClick={() => handleSend(undefined, m.id)} className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-gray-100 rounded-lg text-gray-300 hover:text-blue-600 transition-all"><RotateCcw size={12} /></button>
-                      )}
-                    </div>
-                    <div className={`${m.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-assistant'}`}>
-                      {m.isCouncil && m.councilResponses && (
-                        <div className="mb-8 p-6 bg-gray-50 border border-gray-100">
-                          <p className="text-[9px] font-black text-gray-400 uppercase mb-6 tracking-[0.3em] border-b border-gray-200 pb-2">Council Deliberation Records</p>
-                          <div className="space-y-6">
-                            {m.councilResponses.map((cr, idx) => (
-                              <div key={idx} className="space-y-2">
-                                <div className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-gray-900" /><span className="text-[9px] font-black text-gray-900 uppercase tracking-widest">{cr.model}</span></div>
-                                <div className="text-[11px] text-gray-500 bg-white border border-gray-100 p-4 font-medium italic">"{cr.content.substring(0, 200)}..."</div>
-                              </div>
-                            ))}
+                    <div className={`max-w-[75%] space-y-2 ${m.role === 'user' ? 'text-right' : ''}`}>
+                      <div className="flex items-center gap-2 mb-1 justify-start">
+                        <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">{m.role === 'user' ? 'You' : m.isCouncil ? 'Council' : 'AI'}</span>
+                        {m.role === 'assistant' && !isLoading && (
+                          <button onClick={() => handleSend(undefined, m.id)} className="p-1 hover:bg-gray-100 rounded-lg text-gray-300 hover:text-blue-600 transition-all"><RotateCcw size={12} /></button>
+                        )}
+                      </div>
+                      <div className={m.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-assistant'}>
+                        {m.isCouncil && m.councilResponses && (
+                          <div className="mb-6 p-5 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden text-left">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase mb-4 tracking-widest border-b border-gray-100 pb-2">Council Insights</p>
+                            <div className="space-y-4">
+                              {m.councilResponses.map((cr, cidx) => (
+                                <div key={cidx} className="space-y-1">
+                                  <span className="text-[9px] font-bold text-blue-600 uppercase">{cr.model}</span>
+                                  <p className="text-xs text-gray-500 italic line-clamp-2">"{cr.content}"</p>
+                                </div>
+                              ))}
+                            </div>
                           </div>
+                        )}
+                        <div className="markdown-body">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
                         </div>
-                      )}
-                      <div className="markdown-body">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
                       </div>
                     </div>
-                  </div>
-                  {m.role === 'user' && (
-                    <div className="w-10 h-10 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-400 flex-shrink-0 mt-2 border border-gray-200 shadow-sm">
-                      <User size={20} />
-                    </div>
-                  )}
-                </motion.div>
-              ))
+                  </motion.div>
+                ))}
+              </div>
             )}
           </div>
           <div ref={messagesEndRef} />
         </div>
 
         <div className="p-8 bg-white border-t border-gray-100">
-          <form onSubmit={handleSend} className="max-w-4xl mx-auto flex items-center gap-0 border border-gray-900 overflow-hidden">
-            <div className="pl-6 pr-2 text-gray-400 bg-white border-r border-gray-100 flex items-center justify-center"><Terminal size={18} /></div>
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={isLoading ? "SYSTEM PROCESSING..." : "ENTER COMMAND..."}
-              disabled={isLoading}
-              className="flex-1 bg-white py-6 px-6 text-[13px] font-medium focus:outline-none placeholder:text-gray-300 uppercase tracking-widest"
-            />
-            <button
-              type="submit"
-              onClick={(e) => { if (isLoading) { e.preventDefault(); stopGeneration(); }}}
-              className={`px-10 h-[68px] transition-all font-black text-[10px] tracking-[0.3em] uppercase ${isLoading ? 'bg-red-600 text-white' : input.trim() ? 'bg-gray-900 text-white hover:bg-black' : 'bg-gray-50 text-gray-300'}`}
-            >
-              {isLoading ? <Square size={16} fill="currentColor" /> : "Execute"}
-            </button>
-          </form>
-          <div className="text-center mt-6 flex items-center justify-center gap-6 text-[8px] font-black text-gray-300 uppercase tracking-[0.4em]">
-            <span className="flex items-center gap-2"><Lock size={8} /> Secure Uplink</span>
-            <div className="w-1.5 h-[1px] bg-gray-100" />
-            <span>Architecture v2.0.4</span>
+          <div className="max-w-3xl mx-auto">
+            <form onSubmit={handleSend} className="flex items-center gap-2">
+              <div className="flex-1 relative group">
+                <input
+                  type="text"
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  placeholder={!isPuterReady ? "Connecting to AI..." : isLoading ? "Thinking..." : "Type a message..."}
+                  disabled={isLoading || !isPuterReady}
+                  className="app-input shadow-sm pr-12"
+                />
+              </div>
+              <button
+                type="submit"
+                onClick={(e) => { if (isLoading) { e.preventDefault(); stopGeneration(); }}}
+                className={`w-14 h-14 flex items-center justify-center rounded-2xl transition-all shadow-lg ${!isPuterReady ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : isLoading ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-500/20'}`}
+              >
+                {isLoading ? <Square size={20} fill="currentColor" /> : <Send size={22} />}
+              </button>
+            </form>
+            <p className="text-center mt-6 text-[10px] font-medium text-gray-400 uppercase tracking-widest">Powered by AI Council v2.0</p>
           </div>
         </div>
       </main>
