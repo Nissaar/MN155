@@ -1,0 +1,61 @@
+version: '3.8'
+
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: chatuser
+      POSTGRES_PASSWORD: chatpassword
+      POSTGRES_DB: chatbot
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chatuser -d chatbot"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  #traefik:
+  #  image: traefik:v2.10
+  #  command:
+  #    - "--api.insecure=true"
+  #    - "--providers.docker=true"
+  #    - "--providers.docker.exposedbydefault=false"
+  #    - "--entrypoints.web.address=:80"
+  #  ports:
+  #    - "80:80"
+  #    - "8080:8080" # Dashboard
+  #  volumes:
+  #    - "/run/docker.sock:/var/run/docker.sock:ro"
+
+  app:
+    build: .
+    environment:
+      DATABASE_URL: postgresql://chatuser:chatpassword@db:5432/chatbot
+      JWT_SECRET: ${JWT_SECRET:-super-secret-key-change-me}
+      PORT: 80
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "80:80"
+    #labels:
+    #  - "traefik.enable=true"
+    #  - "traefik.http.routers.app.rule=PathPrefix(`/`)"
+    #  - "traefik.http.routers.app.entrypoints=web"
+    #  - "traefik.http.services.app.loadbalancer.server.port=80"
+    restart: always
+
+volumes:
+  postgres_data:
+
+networks:
+  default:
+    name: chat-network
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.255.0.0/16

@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand: #2563eb;
+  --color-bg-app: #ffffff;
+  --color-bg-sidebar: #fcfcfc;
+  --color-border-subtle: #e5e7eb;
+  --color-text-main: #111827;
+  --color-text-muted: #6b7280;
+  --font-sans: "Inter", system-ui, sans-serif;
+}
+
+@layer base {
+  body {
+    @apply bg-[var(--color-bg-app)] text-[var(--color-text-main)] font-sans antialiased;
+  }
+}
+
+.chat-bubble-user {
+  @apply bg-gray-900 text-white rounded-none border border-gray-900 px-5 py-4;
+}
+
+.chat-bubble-assistant {
+  @apply bg-white text-gray-800 rounded-none border border-gray-200 px-5 py-4;
+}
+
+.sidebar-item {
+  @apply flex items-center gap-3 px-4 py-3 text-sm text-[var(--color-text-muted)] border-l-4 border-transparent hover:bg-gray-50 hover:text-[var(--color-text-main)] transition-all cursor-pointer;
+}
+
+.sidebar-item-active {
+  @apply bg-white text-[var(--color-text-main)] font-bold border-l-4 border-gray-900 shadow-sm;
+}
+
+/* Markdown styling */
+.markdown-body {
+  @apply space-y-4 text-[13.5px] leading-[1.6] text-gray-800;
+}
+
+.markdown-body p {
+  @apply mb-4 last:mb-0;
+}
+
+.markdown-body ul, .markdown-body ol {
+  @apply ml-5 mb-4 list-disc marker:text-gray-300;
+}
+
+.markdown-body h1, .markdown-body h2, .markdown-body h3 {
+  @apply font-black text-gray-900 uppercase tracking-tighter mt-6 mb-2 border-b border-gray-100 pb-1;
+}
+
+.markdown-body code {
+  @apply bg-gray-50 px-1.5 py-0.5 rounded-sm border border-gray-200 text-[11px] font-mono text-gray-600;
+}
+
+.markdown-body pre {
+  @apply bg-gray-900 text-gray-100 p-6 my-5 overflow-x-auto border-l-4 border-blue-500 font-mono text-xs leading-relaxed;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.glass-morphism {
+  @apply bg-white/90 backdrop-blur-md border-b border-gray-200;
+}
+
+.architect-btn {
+  @apply px-6 py-2.5 bg-white border border-gray-200 text-[11px] font-black uppercase tracking-widest text-gray-900 hover:bg-gray-900 hover:text-white transition-all duration-200 active:scale-[0.98];
+}
+
+.architect-input {
+  @apply w-full px-5 py-3.5 bg-white border border-gray-200 rounded-none text-sm focus:border-gray-900 outline-none transition-all placeholder:text-gray-300;
+}
