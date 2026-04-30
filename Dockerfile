@@ -2,6 +2,9 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package*.json ./
+
+ENV NODE_OPTIONS=--no-network-family-autoselection
+
 RUN npm install
 COPY . .
 RUN npm run build
