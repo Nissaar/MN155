@@ -1,6 +1,6 @@
 {
-  "name": "MN155 Terminal",
-  "description": "An exclusive, high-performance chat interface powered by Puter.js and Claude models.",
+  "name": "Chat AI",
+  "description": "A clean, powerful AI assistant with cross-model deliberation capabilities.",
   "requestFramePermissions": [],
   "majorCapabilities": []
 }

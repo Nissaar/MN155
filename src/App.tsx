@@ -465,18 +465,18 @@ export default function App() {
               <div className="flex-1 space-y-1 overflow-y-auto pr-2 scrollbar-hide">
                 {chats.length === 0 ? (
                   <div className="py-20 text-center space-y-3">
-                    <p className="text-xs text-gray-400 font-medium tracking-wide">No chats yet</p>
+                    <p className="text-xs text-gray-400 font-medium tracking-wide">No conversations yet</p>
                   </div>
                 ) : (
                   chats.map(chat => (
                     <div 
                       key={chat.id} 
                       onClick={() => setCurrentChatId(chat.id)} 
-                      className={`group flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all cursor-pointer border ${currentChatId === chat.id ? 'bg-white text-blue-600 border-gray-200 shadow-sm' : 'text-gray-500 hover:bg-gray-100 border-transparent'}`}
+                      className={`group flex items-center gap-3 px-4 py-3.5 rounded-2xl text-[13px] font-medium transition-all cursor-pointer border ${currentChatId === chat.id ? 'bg-white text-blue-600 border-gray-100 shadow-sm' : 'text-gray-500 hover:bg-gray-100 border-transparent'}`}
                     >
                       <MessageSquare size={16} className={currentChatId === chat.id ? 'text-blue-600' : 'text-gray-400'} />
                       <span className="truncate flex-1">{chat.title}</span>
-                      <Trash2 onClick={(e) => deleteChat(e, chat.id)} className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all" size={14} />
+                      <Trash2 onClick={(e) => deleteChat(e, chat.id)} className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-500 transition-all active:scale-90" size={14} />
                     </div>
                   ))
                 )}
@@ -485,48 +485,48 @@ export default function App() {
               <div className="mt-auto pt-6 space-y-6">
                 <div className="space-y-3">
                   {user.is_admin && (
-                    <button onClick={() => setIsAdminView(!isAdminView)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all border ${isAdminView ? 'bg-red-50 border-red-100 text-red-600' : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-100'}`}>
+                    <button onClick={() => setIsAdminView(!isAdminView)} className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl text-xs font-bold transition-all border ${isAdminView ? 'bg-indigo-50 border-indigo-100 text-indigo-600' : 'bg-white border-gray-100 text-gray-600 hover:bg-gray-100'}`}>
                       <Shield size={16} />
-                      {isAdminView ? 'Exit Admin' : 'Admin Panel'}
+                      {isAdminView ? 'Exit Control' : 'Admin Panel'}
                     </button>
                   )}
-                  <button onClick={openWorkspace} className="w-full flex items-center gap-3 px-4 py-3 bg-white border border-gray-200 rounded-xl text-xs font-bold text-gray-600 hover:bg-gray-100 transition-all">
+                  <button onClick={openWorkspace} className="w-full flex items-center gap-3 px-4 py-3.5 bg-white border border-gray-100 rounded-2xl text-xs font-bold text-gray-600 hover:bg-gray-100 transition-all">
                     <FolderOpen size={16} className="text-amber-500" />
-                    Workspace
-                    {directoryHandle && <div className="w-2 h-2 rounded-full bg-green-500 ml-auto" />}
+                    Code Workspace
+                    {directoryHandle && <div className="w-2 h-2 rounded-full bg-green-500 ml-auto shadow-[0_0_8px_rgba(34,197,94,0.3)]" />}
                   </button>
                 </div>
 
-                <div className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-2xl shadow-sm">
-                  <div className="w-9 h-9 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
+                <div className="flex items-center gap-4 p-4 bg-white border border-gray-100 rounded-[24px] shadow-sm">
+                  <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center font-bold text-sm shadow-lg shadow-blue-500/20">
                     {user.email[0].toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold text-gray-900 truncate">{user.email.split('@')[0]}</p>
-                    <p className="text-[10px] text-gray-400 font-medium">Online</p>
+                    <p className="text-[13px] font-bold text-gray-900 truncate">{user.email.split('@')[0]}</p>
+                    <p className="text-[10px] text-gray-400 font-medium tracking-tight">Active Session</p>
                   </div>
-                  <button onClick={handleLogout} className="p-2 hover:bg-red-50 rounded-lg text-gray-400 hover:text-red-500 transition-all">
+                  <button onClick={handleLogout} className="p-2.5 hover:bg-red-50 rounded-xl text-gray-400 hover:text-red-500 transition-all">
                     <LogOut size={16} />
                   </button>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block ml-1 text-center">AI Model</label>
+                  <label className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] block ml-1 text-center">Intelligence Engine</label>
                   <select 
                     value={selectedModel} 
                     onChange={(e) => setSelectedModel(e.target.value as ModelType)} 
-                    className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-xs font-medium text-gray-700 outline-none focus:border-blue-500 transition-all cursor-pointer appearance-none shadow-sm"
+                    className="w-full bg-white border border-gray-100 rounded-2xl px-4 py-3.5 text-xs font-bold text-gray-700 outline-none focus:border-blue-500 transition-all cursor-pointer appearance-none shadow-sm text-center"
                   >
-                    <option value="auto">Auto-Select</option>
-                    <optgroup label="Fast">
-                      <option value="gemini-1.5-flash">Gemini Flash</option>
-                      <option value="gpt-4o-mini">GPT-4o Mini</option>
-                    </optgroup>
-                    <optgroup label="Powerful">
+                    <option value="auto">Neural Auto-route</option>
+                    <optgroup label="High Power">
                       <option value="claude-opus-4.7">Claude Opus</option>
                       <option value="gpt-4o">GPT-4o</option>
                     </optgroup>
-                    <option value="council">AI Council</option>
+                    <optgroup label="Lightning Fast">
+                      <option value="gemini-1.5-flash">Gemini Flash</option>
+                      <option value="claude-3-5-sonnet">Claude Sonnet</option>
+                    </optgroup>
+                    <option value="council">AI Council (Consensus)</option>
                   </select>
                 </div>
               </div>
@@ -538,28 +538,34 @@ export default function App() {
       <main className="flex-1 flex flex-col min-w-0 bg-white relative">
         <header className="h-20 flex items-center justify-between px-8 z-10 sticky top-0 bg-white/80 backdrop-blur-xl border-b border-gray-100">
           <div className="flex items-center gap-6">
-            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 transition-all">
+            <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2.5 hover:bg-gray-100 rounded-xl text-gray-400 transition-all active:scale-95">
               {isSidebarOpen ? <ChevronLeft size={22} /> : <Menu size={22} />}
             </button>
             <div className="flex flex-col">
               <h2 className="text-base font-bold tracking-tight text-gray-900 flex items-center gap-2">
                 {chats.find(c => c.id === currentChatId)?.title || 'New Chat'}
-                <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-50 rounded-full border border-green-100">
+                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                  <span className="text-[9px] font-bold text-green-600 uppercase tracking-widest">Secure</span>
+                </div>
               </h2>
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">{selectedModel === 'council' ? 'Dynamic Consensus Node' : selectedModel.replace(/-/g, ' ')}</span>
             </div>
           </div>
           <div className="flex items-center gap-4">
             {!isPuterReady && (
-              <button onClick={() => window.location.reload()} className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 text-amber-600 rounded-lg text-xs font-bold animate-pulse">
-                <RotateCcw size={14} /> Reconnect
+              <button onClick={() => window.location.reload()} className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 text-amber-600 rounded-xl text-[10px] font-bold border border-amber-100 shadow-sm animate-pulse">
+                <RotateCcw size={14} /> Reconnect AI
               </button>
             )}
             {currentChatId && (
-              <button onClick={exportChat} className="p-2 hover:bg-gray-100 rounded-xl text-gray-400 transition-all" title="Export">
-                <ArrowRight size={20} className="rotate-[270deg]" />
+              <button onClick={exportChat} className="p-2.5 hover:bg-gray-50 rounded-xl text-gray-400 transition-all hover:text-blue-600" title="Secure Export">
+                <ArrowRight size={22} className="rotate-[270deg]" />
               </button>
             )}
-            <Settings size={20} className="text-gray-300 pointer-events-none" />
+            <div className="w-10 h-10 flex items-center justify-center text-gray-300">
+              <Settings size={22} />
+            </div>
           </div>
         </header>
 
@@ -634,13 +640,21 @@ export default function App() {
                       </div>
                       <div className={m.role === 'user' ? 'chat-bubble-user' : 'chat-bubble-assistant'}>
                         {m.isCouncil && m.councilResponses && (
-                          <div className="mb-6 p-5 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden text-left">
-                            <p className="text-[10px] font-bold text-gray-400 uppercase mb-4 tracking-widest border-b border-gray-100 pb-2">Council Insights</p>
-                            <div className="space-y-4">
+                          <div className="council-card">
+                            <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-50">
+                              <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em]">Collective Deliberation Evidence</span>
+                              <Brain size={18} className="text-blue-500/30" />
+                            </div>
+                            <div className="space-y-6">
                               {m.councilResponses.map((cr, cidx) => (
-                                <div key={cidx} className="space-y-1">
-                                  <span className="text-[9px] font-bold text-blue-600 uppercase">{cr.model}</span>
-                                  <p className="text-xs text-gray-500 italic line-clamp-2">"{cr.content}"</p>
+                                <div key={cidx} className="space-y-2">
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-1 h-1 bg-blue-500 rounded-full" />
+                                    <span className="council-member-tag">{cr.model}</span>
+                                  </div>
+                                  <div className="text-[13px] text-gray-500 bg-gray-50/50 p-4 rounded-2xl italic font-medium leading-relaxed border border-gray-100">
+                                    {cr.content.length > 250 ? cr.content.substring(0, 250) + '...' : cr.content}
+                                  </div>
                                 </div>
                               ))}
                             </div>
