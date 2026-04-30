@@ -2,17 +2,18 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 COPY package*.json ./
-
-ENV NODE_OPTIONS=--no-network-family-autoselection
-
 RUN npm install
 COPY . .
 RUN npm run build
 
 # Production Stage
-FROM nginx:alpine
-COPY --from=build /app/dist /usr/share/nginx/html
-# Copy custom nginx config for SPA routing
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+FROM node:22-alpine
+WORKDIR /app
+COPY --from=build /app/package*.json ./
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/server.ts ./server.ts
+
+EXPOSE 3000
+ENV NODE_ENV=production
+CMD ["node", "--experimental-strip-types", "server.ts"]
